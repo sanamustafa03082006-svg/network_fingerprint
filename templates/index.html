@@ -1,0 +1,564 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NetPrint — Network Fingerprint Analyzer</title>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;800&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --bg: #0a0e1a;
+            --surface: #111827;
+            --surface2: #1a2235;
+            --border: #1e2d45;
+            --accent: #00e5ff;
+            --accent2: #ff6b35;
+            --accent3: #7c3aed;
+            --text: #e2e8f0;
+            --muted: #64748b;
+            --success: #10b981;
+            --error: #ef4444;
+            --card-glow: 0 0 30px rgba(0, 229, 255, 0.06);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            background: var(--bg);
+            color: var(--text);
+            font-family: 'Syne', sans-serif;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* Background grid */
+        body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background-image:
+                linear-gradient(rgba(0,229,255,0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0,229,255,0.03) 1px, transparent 1px);
+            background-size: 40px 40px;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .container {
+            max-width: 1100px;
+            margin: 0 auto;
+            padding: 40px 24px;
+            position: relative;
+            z-index: 1;
+        }
+
+        /* Header */
+        header {
+            text-align: center;
+            margin-bottom: 52px;
+            animation: fadeDown 0.6s ease both;
+        }
+
+        .logo-tag {
+            font-family: 'Space Mono', monospace;
+            font-size: 11px;
+            letter-spacing: 4px;
+            color: var(--accent);
+            text-transform: uppercase;
+            margin-bottom: 14px;
+            opacity: 0.8;
+        }
+
+        header h1 {
+            font-size: clamp(36px, 6vw, 64px);
+            font-weight: 800;
+            line-height: 1.05;
+            background: linear-gradient(135deg, #fff 0%, var(--accent) 60%, var(--accent3) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 16px;
+        }
+
+        header p {
+            color: var(--muted);
+            font-size: 16px;
+            max-width: 480px;
+            margin: 0 auto;
+            line-height: 1.6;
+        }
+
+        /* Input Card */
+        .input-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 32px;
+            margin-bottom: 32px;
+            box-shadow: var(--card-glow);
+            animation: fadeUp 0.6s ease 0.1s both;
+        }
+
+        .mode-toggle {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 24px;
+        }
+
+        .mode-btn {
+            font-family: 'Space Mono', monospace;
+            font-size: 12px;
+            padding: 8px 18px;
+            border-radius: 6px;
+            border: 1px solid var(--border);
+            background: transparent;
+            color: var(--muted);
+            cursor: pointer;
+            letter-spacing: 1px;
+            transition: all 0.2s;
+        }
+
+        .mode-btn.active {
+            background: var(--accent);
+            border-color: var(--accent);
+            color: #000;
+            font-weight: 700;
+        }
+
+        .url-row {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 12px;
+        }
+
+        .url-label {
+            font-family: 'Space Mono', monospace;
+            font-size: 11px;
+            color: var(--accent);
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            margin-bottom: 8px;
+        }
+
+        .url-input {
+            flex: 1;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 14px 18px;
+            color: var(--text);
+            font-family: 'Space Mono', monospace;
+            font-size: 14px;
+            outline: none;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+
+        .url-input:focus {
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px rgba(0,229,255,0.1);
+        }
+
+        .url-input.error {
+            border-color: var(--error);
+            box-shadow: 0 0 0 3px rgba(239,68,68,0.1);
+        }
+
+        .error-msg {
+            font-family: 'Space Mono', monospace;
+            font-size: 11px;
+            color: var(--error);
+            margin-top: 6px;
+            display: none;
+        }
+
+        .analyze-btn {
+            width: 100%;
+            margin-top: 20px;
+            padding: 16px;
+            background: var(--accent);
+            color: #000;
+            border: none;
+            border-radius: 10px;
+            font-family: 'Syne', sans-serif;
+            font-size: 16px;
+            font-weight: 700;
+            cursor: pointer;
+            letter-spacing: 1px;
+            transition: all 0.2s;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .analyze-btn:hover { background: #33eaff; transform: translateY(-1px); }
+        .analyze-btn:active { transform: translateY(0); }
+        .analyze-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+        /* Loading */
+        .loader {
+            display: none;
+            text-align: center;
+            padding: 48px;
+            animation: fadeUp 0.4s ease both;
+        }
+
+        .loader-ring {
+            width: 56px;
+            height: 56px;
+            border: 3px solid var(--border);
+            border-top-color: var(--accent);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin: 0 auto 20px;
+        }
+
+        .loader p {
+            font-family: 'Space Mono', monospace;
+            font-size: 13px;
+            color: var(--muted);
+            letter-spacing: 2px;
+        }
+
+        .loader-step {
+            font-family: 'Space Mono', monospace;
+            font-size: 11px;
+            color: var(--accent);
+            margin-top: 8px;
+            opacity: 0.7;
+        }
+
+        /* Results */
+        #results { display: none; animation: fadeUp 0.5s ease both; }
+
+        .section-label {
+            font-family: 'Space Mono', monospace;
+            font-size: 11px;
+            color: var(--accent);
+            letter-spacing: 3px;
+            text-transform: uppercase;
+            margin-bottom: 16px;
+        }
+
+        /* Fingerprint Card */
+        .fingerprint-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 28px;
+            margin-bottom: 24px;
+            box-shadow: var(--card-glow);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .fingerprint-card::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 2px;
+            background: linear-gradient(90deg, var(--accent), var(--accent3));
+        }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 24px;
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+
+        .site-url {
+            font-family: 'Space Mono', monospace;
+            font-size: 13px;
+            color: var(--accent);
+            word-break: break-all;
+        }
+
+        .behavior-badge {
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-family: 'Space Mono', monospace;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 1px;
+            background: rgba(0,229,255,0.1);
+            border: 1px solid var(--accent);
+            color: var(--accent);
+            white-space: nowrap;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 16px;
+        }
+
+        .stat-box {
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 16px;
+        }
+
+        .stat-label {
+            font-family: 'Space Mono', monospace;
+            font-size: 10px;
+            color: var(--muted);
+            letter-spacing: 1.5px;
+            text-transform: uppercase;
+            margin-bottom: 8px;
+        }
+
+        .stat-value {
+            font-family: 'Space Mono', monospace;
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--text);
+        }
+
+        .stat-value.accent { color: var(--accent); }
+
+        /* Charts Grid */
+        .charts-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 24px;
+        }
+
+        .chart-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 24px;
+            box-shadow: var(--card-glow);
+        }
+
+        .chart-card.full { grid-column: 1 / -1; }
+
+        .chart-title {
+            font-family: 'Space Mono', monospace;
+            font-size: 12px;
+            color: var(--muted);
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            margin-bottom: 20px;
+        }
+
+        canvas { max-height: 260px; }
+
+        /* Comparison mode */
+        .compare-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 24px;
+        }
+
+        .diff-badge {
+            font-family: 'Space Mono', monospace;
+            font-size: 10px;
+            padding: 3px 8px;
+            border-radius: 4px;
+            margin-left: 8px;
+        }
+
+        .diff-higher { background: rgba(239,68,68,0.15); color: #ef4444; }
+        .diff-lower  { background: rgba(16,185,129,0.15); color: #10b981; }
+
+        /* DNS list */
+        .dns-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 16px;
+        }
+
+        .dns-tag {
+            font-family: 'Space Mono', monospace;
+            font-size: 11px;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            padding: 4px 10px;
+            color: var(--muted);
+        }
+
+        /* Animations */
+        @keyframes fadeDown {
+            from { opacity: 0; transform: translateY(-20px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes fadeUp {
+            from { opacity: 0; transform: translateY(20px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        @media (max-width: 640px) {
+            .charts-grid, .compare-grid { grid-template-columns: 1fr; }
+            .chart-card.full { grid-column: 1; }
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+
+    <header>
+        <p class="logo-tag">// Network Analysis Tool</p>
+        <h1>NetPrint</h1>
+        <p>Capture live network traffic, extract behavioral fingerprints, and visualize how websites really communicate.</p>
+    </header>
+
+    <!-- Input Card -->
+    <div class="input-card">
+        <div class="mode-toggle">
+            <button class="mode-btn active" onclick="setMode('single')" id="btn-single">Single URL</button>
+            <button class="mode-btn" onclick="setMode('compare')" id="btn-compare">Compare Two URLs</button>
+        </div>
+
+        <div id="input-single">
+            <p class="url-label">Target URL</p>
+            <div class="url-row">
+                <input class="url-input" id="url1" type="text" placeholder="https://example.com" />
+            </div>
+            <p class="error-msg" id="err1">Please enter a valid URL starting with http:// or https://</p>
+        </div>
+
+        <div id="input-compare" style="display:none">
+            <p class="url-label">URL — Site A</p>
+            <div class="url-row">
+                <input class="url-input" id="url2a" type="text" placeholder="https://site-a.com" />
+            </div>
+            <p class="error-msg" id="err2a">Please enter a valid URL starting with http:// or https://</p>
+
+            <p class="url-label" style="margin-top:16px">URL — Site B</p>
+            <div class="url-row">
+                <input class="url-input" id="url2b" type="text" placeholder="https://site-b.com" />
+            </div>
+            <p class="error-msg" id="err2b">Please enter a valid URL starting with http:// or https://</p>
+        </div>
+
+        <button class="analyze-btn" id="analyzeBtn" onclick="runAnalysis()">▶ Analyze Network Traffic</button>
+    </div>
+
+    <!-- Loader -->
+    <div class="loader" id="loader">
+        <div class="loader-ring"></div>
+        <p>CAPTURING TRAFFIC</p>
+        <p class="loader-step" id="loaderStep">Initializing packet sniffer...</p>
+    </div>
+
+    <!-- Results -->
+    <div id="results">
+
+        <!-- Single mode results -->
+        <div id="single-results">
+            <p class="section-label">// Fingerprint Result</p>
+
+            <div class="fingerprint-card" id="fp-card">
+                <div class="card-header">
+                    <div>
+                        <p class="stat-label">Analyzed Site</p>
+                        <p class="site-url" id="fp-url">—</p>
+                    </div>
+                    <span class="behavior-badge" id="fp-behavior">—</span>
+                </div>
+                <div class="stats-grid">
+                    <div class="stat-box">
+                        <p class="stat-label">Total Packets</p>
+                        <p class="stat-value accent" id="fp-packets">—</p>
+                    </div>
+                    <div class="stat-box">
+                        <p class="stat-label">Total Bytes</p>
+                        <p class="stat-value" id="fp-bytes">—</p>
+                    </div>
+                    <div class="stat-box">
+                        <p class="stat-label">Mean Pkt Size</p>
+                        <p class="stat-value" id="fp-mean">—</p>
+                    </div>
+                    <div class="stat-box">
+                        <p class="stat-label">Max Pkt Size</p>
+                        <p class="stat-value" id="fp-max">—</p>
+                    </div>
+                    <div class="stat-box">
+                        <p class="stat-label">Unique IPs</p>
+                        <p class="stat-value accent" id="fp-ips">—</p>
+                    </div>
+                    <div class="stat-box">
+                        <p class="stat-label">Top Protocol</p>
+                        <p class="stat-value" id="fp-proto">—</p>
+                    </div>
+                </div>
+                <div id="dns-section" style="display:none; margin-top:20px">
+                    <p class="stat-label">DNS Queries</p>
+                    <div class="dns-list" id="dns-list"></div>
+                </div>
+            </div>
+
+            <div class="charts-grid">
+                <div class="chart-card">
+                    <p class="chart-title">// Protocol Distribution</p>
+                    <canvas id="protocolChart"></canvas>
+                </div>
+                <div class="chart-card">
+                    <p class="chart-title">// Packet Size Histogram</p>
+                    <canvas id="sizeChart"></canvas>
+                </div>
+                <div class="chart-card full">
+                    <p class="chart-title">// Traffic Timeline (bytes/sec)</p>
+                    <canvas id="timelineChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Compare mode results -->
+        <div id="compare-results" style="display:none">
+            <p class="section-label">// Comparison Report</p>
+            <div class="compare-grid">
+                <div class="fingerprint-card" id="fp-card-a">
+                    <div class="card-header">
+                        <div>
+                            <p class="stat-label">Site A</p>
+                            <p class="site-url" id="fp-url-a">—</p>
+                        </div>
+                        <span class="behavior-badge" id="fp-behavior-a">—</span>
+                    </div>
+                    <div class="stats-grid" id="stats-a"></div>
+                </div>
+                <div class="fingerprint-card" id="fp-card-b">
+                    <div class="card-header">
+                        <div>
+                            <p class="stat-label">Site B</p>
+                            <p class="site-url" id="fp-url-b">—</p>
+                        </div>
+                        <span class="behavior-badge" id="fp-behavior-b">—</span>
+                    </div>
+                    <div class="stats-grid" id="stats-b"></div>
+                </div>
+            </div>
+            <div class="charts-grid">
+                <div class="chart-card">
+                    <p class="chart-title">// Protocol — Site A</p>
+                    <canvas id="protoChartA"></canvas>
+                </div>
+                <div class="chart-card">
+                    <p class="chart-title">// Protocol — Site B</p>
+                    <canvas id="protoChartB"></canvas>
+                </div>
+                <div class="chart-card full">
+                    <p class="chart-title">// Traffic Timeline Overlay</p>
+                    <canvas id="timelineCompare"></canvas>
+                </div>
+            </div>
+        </div>
+
+    </div><!-- /results -->
+
+</div><!-- /container -->
+<script src="/static/script.js"></script>
+</body>
+</html>
